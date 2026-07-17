@@ -293,9 +293,9 @@
     .drawer-color-dot { width: 13px; height: 13px; border-radius: 3px; display: inline-block; flex-shrink: 0; }
     .drawer-path { font-size: 0.7rem; color: #9b8b75; font-weight: normal; margin-left: auto; }
 
-    .layer-tabs { display: flex; gap: 5px; margin-bottom: 10px; flex-wrap: wrap; }
+    .layer-tabs { display: flex; gap: 5px; margin-bottom: 10px; flex-wrap: wrap; align-items: center; }
     .layer-tab {
-      padding: 5px 12px;
+      padding: 5px 10px;
       border-radius: 16px;
       border: 1px solid #d9cdb3;
       background: #fdfaf3;
@@ -304,10 +304,26 @@
       color: #5e4b3c;
       transition: 0.2s;
       white-space: nowrap;
+      display: flex;
+      align-items: center;
+      gap: 3px;
     }
     .layer-tab:hover { background: #e8dfcf; }
     .layer-tab.active { background: #b8a07a; border-color: #9c8560; color: white; font-weight: 600; }
-    .layer-tab .item-count { font-weight: normal; opacity: 0.8; font-size: 0.65rem; margin-left: 3px; }
+    .layer-tab .item-count { font-weight: normal; opacity: 0.8; font-size: 0.65rem; }
+    .edit-layer-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 0.6rem;
+      padding: 1px 3px;
+      color: rgba(255,255,255,0.7);
+      border-radius: 3px;
+      transition: 0.2s;
+    }
+    .layer-tab:not(.active) .edit-layer-btn { color: #9b8b75; }
+    .edit-layer-btn:hover { background: rgba(0,0,0,0.15); color: white; }
+    .layer-tab:not(.active) .edit-layer-btn:hover { color: #5e4b3c; }
 
     .item-card {
       background: white;
@@ -591,12 +607,10 @@
       // ============ Supabase 配置 ============
       const SUPABASE_URL = 'https://fziodicihhcgzscallxe.supabase.co';
       const SUPABASE_ANON_KEY = 'sb_publishable_WvozrO9H8S_V35V3g4gYkA_hvBwEqyT';
-      const PASSWORD_HASH = '19911005'; // 简单密码（生产环境建议用真正的哈希）
+      const PASSWORD_HASH = '19911005';
 
-      // 初始化 Supabase 客户端
       const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-      
-      const DATA_ID = 'home_storage_main'; // 数据库中的记录ID
+      const DATA_ID = 'home_storage_main';
 
       // ============ DOM 元素 ============
       const loginOverlay = document.getElementById('loginOverlay');
@@ -609,6 +623,8 @@
       const mainArea = document.getElementById('mainArea');
       const contextHint = document.getElementById('contextHint');
       const syncDot = document.getElementById('syncDot');
+      const canvasInner = document.getElementById('canvasInner');
+      const itemListContainer = document.getElementById('itemListContainer');
 
       // ============ 数据 ============
       let appData = null;
@@ -751,19 +767,16 @@
             .select('app_data')
             .eq('id', DATA_ID)
             .single();
-
           if (error && error.code !== 'PGRST116') {
             console.error('加载失败:', error);
             setSyncStatus('error');
             return null;
           }
-
           if (data && data.app_data) {
             const parsed = typeof data.app_data === 'string' ? JSON.parse(data.app_data) : data.app_data;
             setSyncStatus('');
             return parsed;
           }
-
           setSyncStatus('');
           return null;
         } catch (e) {
@@ -785,7 +798,6 @@
               password_hash: PASSWORD_HASH,
               app_data: jsonStr
             }, { onConflict: 'id' });
-
           if (error) {
             console.error('保存失败:', error);
             setSyncStatus('error');
@@ -798,7 +810,6 @@
         }
       }
 
-      // 防抖保存
       let saveTimeout = null;
       function debouncedSave() {
         if (saveTimeout) clearTimeout(saveTimeout);
@@ -815,24 +826,18 @@
           passwordInput.focus();
           return;
         }
-
         loginError.style.display = 'none';
         loginStatus.textContent = '⏳ 正在从云端加载数据...';
-
-        // 先尝试从云端加载
         const cloudData = await loadFromCloud();
-
         if (cloudData) {
           appData = cloudData;
           loginStatus.textContent = '✅ 已从云端同步数据';
         } else {
-          // 检查本地是否有缓存
           const localData = localStorage.getItem('home_storage_local_backup');
           if (localData) {
             try {
               appData = JSON.parse(localData);
               loginStatus.textContent = '⚠️ 云端无数据，使用本地缓存';
-              // 把本地数据推送到云端
               setTimeout(() => saveToCloud(), 500);
             } catch (e) {
               appData = getDefaultData();
@@ -845,8 +850,6 @@
             setTimeout(() => saveToCloud(), 500);
           }
         }
-
-        // 显示主界面
         setTimeout(() => {
           loginOverlay.style.display = 'none';
           topBar.style.display = 'flex';
@@ -858,7 +861,7 @@
         }, 600);
       }
 
-      // ============ 导出/导入（保留作为备份） ============
+      // ============ 导出/导入 ============
       function exportData() {
         if (!appData) return;
         const blob = new Blob([JSON.stringify(appData, null, 2)], { type: 'application/json' });
@@ -1002,7 +1005,6 @@
 
       // ============ 画布渲染 ============
       function renderCanvas() {
-        const canvasInner = document.getElementById('canvasInner');
         canvasInner.innerHTML = '';
         const room = getCurrentRoom();
         if (!room) {
@@ -1019,7 +1021,6 @@
       }
 
       function renderFurniture(furn) {
-        const canvasInner = document.getElementById('canvasInner');
         const el = document.createElement('div');
         el.className = 'furniture' + (selectedFurnitureId === furn.id ? ' open' : '');
         el.style.left = furn.x + 'px';
@@ -1264,7 +1265,6 @@
 
       // ============ 物品面板 ============
       function renderPendingPanel() {
-        const container = document.getElementById('itemListContainer');
         const items = appData.pendingItems || [];
         let html = '<div class="drawer-title">📥 待处理物品 (' + items.length + '件)</div>';
         if (items.length === 0) {
@@ -1293,7 +1293,7 @@
               <span id="pendingImgFileName" style="font-size:0.65rem;color:#9b8b75;"></span>
             </div>`;
         }
-        container.innerHTML = html;
+        itemListContainer.innerHTML = html;
         document.querySelectorAll('.assign-btn').forEach(b => b.onclick = () => openAssignModal(b.dataset.pendid));
         document.querySelectorAll('.delete-pending').forEach(b => b.onclick = () => deletePendingItem(b.dataset.pendid));
         const addBtn = document.getElementById('addPendingItemBtn');
@@ -1321,10 +1321,9 @@
       }
 
       function renderItemPanel() {
-        const container = document.getElementById('itemListContainer');
         if (currentPanel === 'pending') { renderPendingPanel(); return; }
         if (!selectedFurnitureId) {
-          container.innerHTML = '<div class="empty-state">🪑 点击柜子查看物品<br><br><a href="#" id="goPendingLink" style="color:#e0795c;">📥 查看待处理物品</a></div>';
+          itemListContainer.innerHTML = '<div class="empty-state">🪑 点击柜子查看物品<br><br><a href="#" id="goPendingLink" style="color:#e0795c;">📥 查看待处理物品</a></div>';
           document.getElementById('goPendingLink')?.addEventListener('click', e => { e.preventDefault(); switchPanel('pending'); });
           return;
         }
@@ -1347,24 +1346,10 @@
             <span class="drawer-path">${layers.length}层 · ${getTotalItems(furnRef)}件</span>
           </div>`;
         if (layers.length > 1) {
-          html += '<div class="layer-tabs">';
-         layers.forEach((l, i) => {
-  html += `<span class="layer-tab${i===selectedLayerIndex?' active':''}" data-layer-idx="${i}">${escapeHtml(l.name)}<span class="item-count">(${(l.items||[]).length})</span><button class="icon-btn edit-layer-name" data-layer-idx="${i}" title="改层名" style="margin-left:3px;font-size:0.65rem;">✎</button></span>`;
-});
-          // 编辑层名
-document.querySelectorAll('.edit-layer-name').forEach(btn => {
-  btn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    const idx = parseInt(btn.dataset.layerIdx);
-    const layer = layers[idx];
-    const newName = prompt('修改层名：', layer.name);
-    if (newName !== null && newName.trim()) {
-      layer.name = newName.trim();
-      refreshAll();
-      debouncedSave();
-    }
-  });
-});
+          html += '<div class="layer-tabs" id="layerTabsContainer">';
+          layers.forEach((l, i) => {
+            html += `<span class="layer-tab${i===selectedLayerIndex?' active':''}" data-layer-idx="${i}">${escapeHtml(l.name)}<span class="item-count">(${(l.items||[]).length})</span><button class="edit-layer-btn" data-layer-idx="${i}" title="改层名">✎</button></span>`;
+          });
           html += '<span class="layer-tab" data-action="edit-layers" style="border-style:dashed;">⚙️</span></div>';
         }
         if (items.length === 0) {
@@ -1393,11 +1378,33 @@ document.querySelectorAll('.edit-layer-name').forEach(btn => {
             </div>
             <span id="imgFileName" style="font-size:0.65rem;color:#9b8b75;"></span>
           </div>`;
-        container.innerHTML = html;
+        itemListContainer.innerHTML = html;
 
-        document.querySelectorAll('.layer-tab[data-layer-idx]').forEach(t => {
-          t.addEventListener('click', () => { selectedLayerIndex = parseInt(t.dataset.layerIdx); refreshAll(); });
-        });
+        // 层标签点击切换 + 编辑层名（事件委托）
+        const layerTabsContainer = document.getElementById('layerTabsContainer');
+        if (layerTabsContainer) {
+          layerTabsContainer.addEventListener('click', (e) => {
+            const editBtn = e.target.closest('.edit-layer-btn');
+            if (editBtn) {
+              e.stopPropagation();
+              const idx = parseInt(editBtn.dataset.layerIdx);
+              const layer = layers[idx];
+              const newName = prompt('修改层名：', layer.name);
+              if (newName !== null && newName.trim()) {
+                layer.name = newName.trim();
+                refreshAll();
+                debouncedSave();
+              }
+              return;
+            }
+            const layerTab = e.target.closest('.layer-tab[data-layer-idx]');
+            if (layerTab) {
+              selectedLayerIndex = parseInt(layerTab.dataset.layerIdx);
+              refreshAll();
+            }
+          });
+        }
+
         document.querySelector('[data-action="edit-layers"]')?.addEventListener('click', () => editFurnitureDialog(furnRef));
         document.getElementById('addItemBtn')?.addEventListener('click', () => {
           const name = document.getElementById('newItemName')?.value.trim();
@@ -1469,7 +1476,6 @@ document.querySelectorAll('.edit-layer-name').forEach(btn => {
 
       // ============ 刷新 ============
       function refreshAll() {
-        // 备份到本地
         if (appData) {
           localStorage.setItem('home_storage_local_backup', JSON.stringify(appData));
         }
@@ -1510,7 +1516,7 @@ document.querySelectorAll('.edit-layer-name').forEach(btn => {
         }
       });
       document.getElementById('canvasArea').addEventListener('click', e => {
-        if (e.target === document.getElementById('canvasArea') || e.target === document.getElementById('canvasInner')) {
+        if (e.target === document.getElementById('canvasArea') || e.target === canvasInner) {
           if (selectedFurnitureId !== null) { selectedFurnitureId = null; selectedLayerIndex = 0; refreshAll(); }
         }
       });
