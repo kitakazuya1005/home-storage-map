@@ -1349,7 +1349,7 @@
         if (layers.length > 1) {
           html += '<div class="layer-tabs">';
          layers.forEach((l, i) => {
-  html += `<span class="layer-tab${i===selectedLayerIndex?' active':''}" data-layer-idx="${i}">${escapeHtml(l.name)}<span class="item-count">(${(l.items||[]).length})</span></span>`;
+  html += `<span class="layer-tab${i===selectedLayerIndex?' active':''}" data-layer-idx="${i}">${escapeHtml(l.name)}<span class="item-count">(${(l.items||[]).length})</span><button class="icon-btn edit-layer-name" data-layer-idx="${i}" title="改层名" style="margin-left:3px;font-size:0.65rem;">✎</button></span>`;
 });
           html += '<span class="layer-tab" data-action="edit-layers" style="border-style:dashed;">⚙️</span></div>';
         }
