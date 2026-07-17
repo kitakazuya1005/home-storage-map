@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes, maximum-scale=2.0, minimum-scale=0.5">
   <title>🏠 家里的小东西 - 收纳地图</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -14,6 +15,82 @@
       flex-direction: column;
       overflow: hidden;
       user-select: none;
+    }
+
+    /* 登录遮罩 */
+    .login-overlay {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0,0,0,0.6);
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(6px);
+    }
+    .login-box {
+      background: #fffef9;
+      border-radius: 24px;
+      padding: 36px 30px;
+      width: 360px;
+      max-width: 90vw;
+      text-align: center;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.2);
+    }
+    .login-box h2 {
+      font-size: 1.6rem;
+      color: #5e4b3c;
+      margin-bottom: 8px;
+      letter-spacing: 2px;
+    }
+    .login-box .subtitle {
+      font-size: 0.85rem;
+      color: #9b8b75;
+      margin-bottom: 22px;
+    }
+    .login-box input {
+      width: 100%;
+      padding: 12px 16px;
+      border: 2px solid #d9cdb3;
+      border-radius: 30px;
+      font-size: 1rem;
+      text-align: center;
+      outline: none;
+      background: #fdfaf3;
+      color: #4d3e2f;
+      letter-spacing: 4px;
+    }
+    .login-box input:focus {
+      border-color: #b8a07a;
+    }
+    .login-box button {
+      width: 100%;
+      margin-top: 16px;
+      padding: 12px;
+      border: none;
+      border-radius: 30px;
+      background: #c9af86;
+      color: white;
+      font-size: 1rem;
+      font-weight: bold;
+      cursor: pointer;
+      letter-spacing: 2px;
+      transition: 0.2s;
+    }
+    .login-box button:hover {
+      background: #b59763;
+    }
+    .login-box .error-msg {
+      color: #e0795c;
+      font-size: 0.8rem;
+      margin-top: 10px;
+      display: none;
+    }
+    .login-box .sync-status {
+      font-size: 0.75rem;
+      color: #9b8b75;
+      margin-top: 14px;
     }
 
     /* 顶部导航栏 */
@@ -44,7 +121,7 @@
     }
     .floor-tab:hover { background: #ebe3d3; }
     .floor-tab.active { background: #c9af86; border-color: #b8a07a; color: white; font-weight: bold; }
-    .top-actions { display: flex; gap: 6px; margin-left: auto; }
+    .top-actions { display: flex; gap: 6px; margin-left: auto; align-items: center; }
     .btn-xs {
       background: #fdfaf3;
       border: 1px solid #d9cdb3;
@@ -57,6 +134,19 @@
       white-space: nowrap;
     }
     .btn-xs:hover { background: #ebe3d3; }
+    .sync-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #4caf50;
+      margin-left: 4px;
+      display: inline-block;
+    }
+    .sync-dot.saving { background: #ff9800; animation: pulse 0.8s infinite; }
+    .sync-dot.error { background: #e0795c; }
+    @keyframes pulse {
+      0%,100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
 
     /* 房间标签栏 */
     .room-bar {
@@ -82,7 +172,6 @@
     }
     .room-tab:hover { background: #ebe3d3; }
     .room-tab.active { background: #b8a07a; border-color: #9c8560; color: white; font-weight: 600; }
-    .room-bar .btn-xs { font-size: 0.7rem; }
 
     /* 主体 */
     .main-area { display: flex; flex: 1; overflow: hidden; }
@@ -316,8 +405,6 @@
       min-width: 900px;
       min-height: 650px;
     }
-
-    /* 柜子/抽屉 */
     .furniture {
       position: absolute;
       border-radius: 10px;
@@ -387,14 +474,10 @@
       cursor: pointer; font-size: 0.8rem; padding: 0 2px; opacity: 0.5;
     }
     .delete-furniture:hover { color: #c0392b; opacity: 1; }
-
-    /* 调整大小的手柄 */
     .resize-handle {
       position: absolute;
-      bottom: 2px;
-      right: 2px;
-      width: 14px;
-      height: 14px;
+      bottom: 2px; right: 2px;
+      width: 14px; height: 14px;
       background: #cbb99b;
       border-radius: 3px;
       cursor: nwse-resize;
@@ -426,11 +509,27 @@
   </style>
 </head>
 <body>
-  <!-- 顶部导航 -->
-  <div class="top-bar">
+
+  <!-- 登录遮罩 -->
+  <div class="login-overlay" id="loginOverlay">
+    <div class="login-box">
+      <h2>🏠 家里的小东西</h2>
+      <div class="subtitle">输入密码查看收纳地图</div>
+      <input type="password" id="passwordInput" placeholder="请输入密码" autofocus />
+      <button id="loginBtn">🔑 进入</button>
+      <div class="error-msg" id="loginError">密码错误，请重试</div>
+      <div class="sync-status" id="loginStatus"></div>
+    </div>
+  </div>
+
+  <!-- 顶部导航栏 -->
+  <div class="top-bar" id="topBar" style="display:none;">
     <span class="home-icon">🏠</span>
     <div class="floor-tabs" id="floorTabs"></div>
     <div class="top-actions">
+      <span id="syncIndicator" style="font-size:0.7rem;color:#9b8b75;display:flex;align-items:center;gap:4px;">
+        已同步<span class="sync-dot" id="syncDot"></span>
+      </span>
       <button class="btn-xs" id="addFloorBtn">➕ 楼层</button>
       <button class="btn-xs" id="exportBtn">📤 导出</button>
       <button class="btn-xs" id="importBtn">📥 导入</button>
@@ -438,13 +537,13 @@
     </div>
   </div>
 
-  <!-- 房间标签 -->
-  <div class="room-bar" id="roomBar">
+  <!-- 房间标签栏 -->
+  <div class="room-bar" id="roomBar" style="display:none;">
     <span style="font-size:0.8rem;color:#9b8b75;">📍 房间：</span>
   </div>
 
   <!-- 主体 -->
-  <div class="main-area">
+  <div class="main-area" id="mainArea" style="display:none;">
     <div class="side-panel">
       <div class="panel-tabs">
         <div class="panel-tab active" data-panel="items">📋 物品清单</div>
@@ -470,12 +569,12 @@
       <div class="canvas-inner" id="canvasInner"></div>
     </div>
   </div>
-  <div class="context-hint">✨ 拖动柜子移动 | 右下角拖拽调整大小 | 双击编辑 | 点击查看物品</div>
+  <div class="context-hint" id="contextHint" style="display:none;">✨ 拖动移动 | 右下角拖拽调大小 | 双击编辑 | 点击查看物品</div>
 
   <!-- 分配弹窗 -->
   <div class="modal-overlay" id="assignModal" style="display:none;">
     <div class="modal">
-      <h3>📦 将此物品分配到...</h3>
+      <h3>📦 分配此物品到...</h3>
       <select id="assignFloor"></select>
       <select id="assignRoom"></select>
       <select id="assignFurniture"></select>
@@ -489,7 +588,34 @@
 
   <script>
     (function() {
-      const STORAGE_KEY = 'home_storage_map_v6_roomsize';
+      // ============ Supabase 配置 ============
+      const SUPABASE_URL = 'https://fziodicihhcgzscallxe.supabase.co';
+      const SUPABASE_ANON_KEY = 'sb_publishable_WvozrO9H8S_V35V3g4gYkA_hvBwEqyT';
+      const PASSWORD_HASH = '19911005'; // 简单密码（生产环境建议用真正的哈希）
+
+      // 初始化 Supabase 客户端
+      const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      
+      const DATA_ID = 'home_storage_main'; // 数据库中的记录ID
+
+      // ============ DOM 元素 ============
+      const loginOverlay = document.getElementById('loginOverlay');
+      const passwordInput = document.getElementById('passwordInput');
+      const loginBtn = document.getElementById('loginBtn');
+      const loginError = document.getElementById('loginError');
+      const loginStatus = document.getElementById('loginStatus');
+      const topBar = document.getElementById('topBar');
+      const roomBar = document.getElementById('roomBar');
+      const mainArea = document.getElementById('mainArea');
+      const contextHint = document.getElementById('contextHint');
+      const syncDot = document.getElementById('syncDot');
+
+      // ============ 数据 ============
+      let appData = null;
+      let selectedFurnitureId = null;
+      let selectedLayerIndex = 0;
+      let currentPanel = 'items';
+      let pendingItemToAssign = null;
 
       function getDefaultData() {
         return {
@@ -563,41 +689,8 @@
         };
       }
 
-      function loadData() {
-        const saved = localStorage.getItem(STORAGE_KEY);
-        if (saved) {
-          try {
-            const data = JSON.parse(saved);
-            if (data.floors && Array.isArray(data.floors)) {
-              data.floors.forEach(floor => {
-                floor.rooms.forEach(room => {
-                  room.furniture.forEach(furn => {
-                    if (!furn.layers || !Array.isArray(furn.layers)) {
-                      furn.layers = [{ id: generateId('layer'), name: '抽屉', items: furn.items || [] }];
-                      delete furn.items;
-                    }
-                  });
-                });
-              });
-              if (!data.pendingItems) data.pendingItems = [];
-              if (data.currentRoomIndex === undefined) data.currentRoomIndex = 0;
-              return data;
-            }
-          } catch (e) { console.error('解析失败', e); }
-        }
-        return getDefaultData();
-      }
-
-      function saveData(data) { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
-
-      let appData = loadData();
-      let selectedFurnitureId = null;
-      let selectedLayerIndex = 0;
-      let currentPanel = 'items';
-      let pendingItemToAssign = null;
-
       function getCurrentFloor() {
-        if (appData.floors.length === 0) return null;
+        if (!appData || appData.floors.length === 0) return null;
         if (appData.currentFloorIndex >= appData.floors.length) appData.currentFloorIndex = 0;
         return appData.floors[appData.currentFloorIndex];
       }
@@ -610,6 +703,7 @@
       }
 
       function findFurnitureRef(furnId) {
+        if (!appData) return null;
         for (const floor of appData.floors) {
           for (const room of floor.rooms) {
             const found = room.furniture.find(f => f.id === furnId);
@@ -644,10 +738,175 @@
         return (furn.layers || []).reduce((sum, l) => sum + (l.items || []).length, 0);
       }
 
+      // ============ Supabase 同步 ============
+      function setSyncStatus(status) {
+        syncDot.className = 'sync-dot ' + status;
+      }
+
+      async function loadFromCloud() {
+        setSyncStatus('saving');
+        try {
+          const { data, error } = await supabase
+            .from('storage_data')
+            .select('app_data')
+            .eq('id', DATA_ID)
+            .single();
+
+          if (error && error.code !== 'PGRST116') {
+            console.error('加载失败:', error);
+            setSyncStatus('error');
+            return null;
+          }
+
+          if (data && data.app_data) {
+            const parsed = typeof data.app_data === 'string' ? JSON.parse(data.app_data) : data.app_data;
+            setSyncStatus('');
+            return parsed;
+          }
+
+          setSyncStatus('');
+          return null;
+        } catch (e) {
+          console.error('加载异常:', e);
+          setSyncStatus('error');
+          return null;
+        }
+      }
+
+      async function saveToCloud() {
+        if (!appData) return;
+        setSyncStatus('saving');
+        try {
+          const jsonStr = JSON.stringify(appData);
+          const { error } = await supabase
+            .from('storage_data')
+            .upsert({
+              id: DATA_ID,
+              password_hash: PASSWORD_HASH,
+              app_data: jsonStr
+            }, { onConflict: 'id' });
+
+          if (error) {
+            console.error('保存失败:', error);
+            setSyncStatus('error');
+          } else {
+            setSyncStatus('');
+          }
+        } catch (e) {
+          console.error('保存异常:', e);
+          setSyncStatus('error');
+        }
+      }
+
+      // 防抖保存
+      let saveTimeout = null;
+      function debouncedSave() {
+        if (saveTimeout) clearTimeout(saveTimeout);
+        setSyncStatus('saving');
+        saveTimeout = setTimeout(() => saveToCloud(), 500);
+      }
+
+      // ============ 登录 ============
+      async function handleLogin() {
+        const inputPwd = passwordInput.value.trim();
+        if (inputPwd !== PASSWORD_HASH) {
+          loginError.style.display = 'block';
+          passwordInput.value = '';
+          passwordInput.focus();
+          return;
+        }
+
+        loginError.style.display = 'none';
+        loginStatus.textContent = '⏳ 正在从云端加载数据...';
+
+        // 先尝试从云端加载
+        const cloudData = await loadFromCloud();
+
+        if (cloudData) {
+          appData = cloudData;
+          loginStatus.textContent = '✅ 已从云端同步数据';
+        } else {
+          // 检查本地是否有缓存
+          const localData = localStorage.getItem('home_storage_local_backup');
+          if (localData) {
+            try {
+              appData = JSON.parse(localData);
+              loginStatus.textContent = '⚠️ 云端无数据，使用本地缓存';
+              // 把本地数据推送到云端
+              setTimeout(() => saveToCloud(), 500);
+            } catch (e) {
+              appData = getDefaultData();
+              loginStatus.textContent = '🆕 首次使用，已创建默认数据';
+              setTimeout(() => saveToCloud(), 500);
+            }
+          } else {
+            appData = getDefaultData();
+            loginStatus.textContent = '🆕 首次使用，已创建默认数据';
+            setTimeout(() => saveToCloud(), 500);
+          }
+        }
+
+        // 显示主界面
+        setTimeout(() => {
+          loginOverlay.style.display = 'none';
+          topBar.style.display = 'flex';
+          roomBar.style.display = 'flex';
+          mainArea.style.display = 'flex';
+          contextHint.style.display = 'block';
+          updatePanelTabUI();
+          refreshAll();
+        }, 600);
+      }
+
+      // ============ 导出/导入（保留作为备份） ============
+      function exportData() {
+        if (!appData) return;
+        const blob = new Blob([JSON.stringify(appData, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = '家人物品地图_备份_' + new Date().toISOString().slice(0,10) + '.json';
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+
+      function importData(file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          try {
+            const data = JSON.parse(e.target.result);
+            if (data.floors && Array.isArray(data.floors)) {
+              if (confirm('导入将覆盖当前数据，继续？')) {
+                data.floors.forEach(floor => {
+                  floor.rooms.forEach(room => {
+                    room.furniture.forEach(furn => {
+                      if (!furn.layers || !Array.isArray(furn.layers)) {
+                        furn.layers = [{ id: generateId('layer'), name: '抽屉', items: furn.items || [] }];
+                        delete furn.items;
+                      }
+                    });
+                  });
+                });
+                if (!data.pendingItems) data.pendingItems = [];
+                if (data.currentRoomIndex === undefined) data.currentRoomIndex = 0;
+                appData = data;
+                selectedFurnitureId = null; selectedLayerIndex = 0; currentPanel = 'items';
+                updatePanelTabUI();
+                refreshAll();
+                debouncedSave();
+                alert('导入成功！');
+              }
+            } else { alert('格式错误'); }
+          } catch (err) { alert('解析失败'); }
+        };
+        reader.readAsText(file);
+      }
+
       // ============ 楼层和房间导航 ============
       function renderFloorTabs() {
         const container = document.getElementById('floorTabs');
         container.innerHTML = '';
+        if (!appData) return;
         appData.floors.forEach((floor, i) => {
           const tab = document.createElement('span');
           tab.className = 'floor-tab' + (i === appData.currentFloorIndex ? ' active' : '');
@@ -658,11 +917,12 @@
             selectedFurnitureId = null;
             selectedLayerIndex = 0;
             refreshAll();
+            debouncedSave();
           });
           tab.addEventListener('dblclick', (e) => {
             e.stopPropagation();
             const n = prompt('楼层名称：', floor.name);
-            if (n && n.trim()) { floor.name = n.trim(); refreshAll(); }
+            if (n && n.trim()) { floor.name = n.trim(); refreshAll(); debouncedSave(); }
           });
           container.appendChild(tab);
         });
@@ -671,7 +931,6 @@
       function renderRoomTabs() {
         const bar = document.getElementById('roomBar');
         const floor = getCurrentFloor();
-        // 保留第一个提示span
         bar.innerHTML = '<span style="font-size:0.8rem;color:#9b8b75;">📍 房间：</span>';
         if (!floor || floor.rooms.length === 0) {
           bar.innerHTML += '<span style="color:#cbb99b;font-size:0.8rem;">暂无房间，点击添加</span>';
@@ -689,17 +948,15 @@
             tab.addEventListener('dblclick', (e) => {
               e.stopPropagation();
               const n = prompt('房间名称：', room.name);
-              if (n && n.trim()) { room.name = n.trim(); refreshAll(); }
+              if (n && n.trim()) { room.name = n.trim(); refreshAll(); debouncedSave(); }
             });
             bar.appendChild(tab);
           });
         }
-        // 添加房间按钮
         const addBtn = document.createElement('button');
         addBtn.className = 'btn-xs';
         addBtn.textContent = '➕ 房间';
         addBtn.addEventListener('click', addRoom);
-        // 删除房间按钮
         const delBtn = document.createElement('button');
         delBtn.className = 'btn-xs';
         delBtn.textContent = '🗑';
@@ -713,6 +970,7 @@
             if (appData.currentRoomIndex >= floor.rooms.length) appData.currentRoomIndex = Math.max(0, floor.rooms.length - 1);
             selectedFurnitureId = null; selectedLayerIndex = 0;
             refreshAll();
+            debouncedSave();
           }
         });
         bar.appendChild(addBtn);
@@ -727,6 +985,7 @@
         appData.currentRoomIndex = 0;
         selectedFurnitureId = null; selectedLayerIndex = 0;
         refreshAll();
+        debouncedSave();
       }
 
       function addRoom() {
@@ -738,28 +997,29 @@
         appData.currentRoomIndex = floor.rooms.length - 1;
         selectedFurnitureId = null; selectedLayerIndex = 0;
         refreshAll();
+        debouncedSave();
       }
 
-      // ============ 画布渲染（当前房间独占） ============
+      // ============ 画布渲染 ============
       function renderCanvas() {
+        const canvasInner = document.getElementById('canvasInner');
         canvasInner.innerHTML = '';
         const room = getCurrentRoom();
         if (!room) {
           canvasInner.innerHTML = '<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#cbb99b;font-size:1.2rem;text-align:center;">🏠 点击上方「房间」按钮<br>添加第一个房间</div>';
           return;
         }
-        // 房间名称水印
         const watermark = document.createElement('div');
         watermark.style.cssText = 'position:absolute;top:20px;left:30px;font-size:2.5rem;color:rgba(200,180,150,0.15);font-weight:bold;pointer-events:none;letter-spacing:4px;';
         watermark.textContent = room.name;
         canvasInner.appendChild(watermark);
-
         if (room.furniture) {
           room.furniture.forEach(furn => renderFurniture(furn));
         }
       }
 
       function renderFurniture(furn) {
+        const canvasInner = document.getElementById('canvasInner');
         const el = document.createElement('div');
         el.className = 'furniture' + (selectedFurnitureId === furn.id ? ' open' : '');
         el.style.left = furn.x + 'px';
@@ -767,13 +1027,11 @@
         el.style.width = furn.width + 'px';
         el.style.height = furn.height + 'px';
         el.style.backgroundColor = furn.color || '#fdfaf5';
-
         const layers = furn.layers || [];
         let indicators = '';
         layers.forEach(l => {
           indicators += `<div class="furniture-layer-indicator">${escapeHtml(l.name)} · ${(l.items||[]).length}件</div>`;
         });
-
         el.innerHTML = `
           <div class="furniture-header" style="background:${furn.color||'#fdfaf5'}">
             <span><span class="color-dot-sm" style="background:${adjustColor(furn.color,-30)};"></span>${escapeHtml(furn.name)}</span>
@@ -782,8 +1040,6 @@
           <div class="furniture-body">${indicators}</div>
           <div class="resize-handle"></div>
         `;
-
-        // 删除按钮
         el.querySelector('.delete-furniture').addEventListener('click', (e) => {
           e.stopPropagation();
           const room = getCurrentRoom();
@@ -792,10 +1048,9 @@
             room.furniture = room.furniture.filter(f => f.id !== furn.id);
             if (selectedFurnitureId === furn.id) { selectedFurnitureId = null; selectedLayerIndex = 0; }
             refreshAll();
+            debouncedSave();
           }
         });
-
-        // 点击选中
         el.addEventListener('click', (e) => {
           if (e.target.closest('.delete-furniture') || e.target.closest('.resize-handle')) return;
           if (selectedFurnitureId === furn.id) {
@@ -806,21 +1061,13 @@
           }
           refreshAll();
         });
-
-        // 双击编辑
         el.addEventListener('dblclick', (e) => {
           if (e.target.closest('.resize-handle')) return;
           e.stopPropagation();
           editFurnitureDialog(furn);
         });
-
-        // 拖动
         makeDraggable(el, furn);
-
-        // 调整大小
-        const resizeHandle = el.querySelector('.resize-handle');
-        makeResizable(el, furn, resizeHandle);
-
+        makeResizable(el, furn, el.querySelector('.resize-handle'));
         canvasInner.appendChild(el);
       }
 
@@ -847,6 +1094,7 @@
         }
         if (selectedLayerIndex >= (furn.layers||[]).length) selectedLayerIndex = 0;
         refreshAll();
+        debouncedSave();
       }
 
       function makeDraggable(element, obj) {
@@ -865,7 +1113,7 @@
           function mu() {
             document.removeEventListener('mousemove', mm);
             document.removeEventListener('mouseup', mu);
-            saveData(appData);
+            debouncedSave();
           }
           document.addEventListener('mousemove', mm);
           document.addEventListener('mouseup', mu);
@@ -887,7 +1135,7 @@
           function mu() {
             document.removeEventListener('mousemove', mm);
             document.removeEventListener('mouseup', mu);
-            saveData(appData);
+            debouncedSave();
           }
           document.addEventListener('mousemove', mm);
           document.addEventListener('mouseup', mu);
@@ -916,6 +1164,7 @@
         });
         selectedFurnitureId = null; selectedLayerIndex = 0;
         refreshAll();
+        debouncedSave();
       }
 
       // ============ 面板标签 ============
@@ -925,7 +1174,9 @@
         if (activeTab) activeTab.classList.add('active');
         document.getElementById('panelActionsItems').style.display = currentPanel === 'items' ? 'flex' : 'none';
         document.getElementById('panelActionsPending').style.display = currentPanel === 'pending' ? 'flex' : 'none';
-        document.getElementById('pendingBadge').textContent = (appData.pendingItems || []).length || '';
+        if (appData) {
+          document.getElementById('pendingBadge').textContent = (appData.pendingItems || []).length || '';
+        }
       }
 
       function switchPanel(panel) {
@@ -943,12 +1194,14 @@
         const note = prompt('备注（选填）：', '');
         appData.pendingItems.push({ id: generateId('pend'), name: name.trim(), note: (note||'').trim(), img: '' });
         refreshAll();
+        debouncedSave();
       }
 
       function deletePendingItem(id) {
         if (confirm('删除此待处理物品？')) {
           appData.pendingItems = appData.pendingItems.filter(p => p.id !== id);
           refreshAll();
+          debouncedSave();
         }
       }
 
@@ -1005,11 +1258,13 @@
         currentPanel = 'items';
         updatePanelTabUI();
         refreshAll();
+        debouncedSave();
         setTimeout(() => alert('✅ 已分配！'), 200);
       }
 
       // ============ 物品面板 ============
       function renderPendingPanel() {
+        const container = document.getElementById('itemListContainer');
         const items = appData.pendingItems || [];
         let html = '<div class="drawer-title">📥 待处理物品 (' + items.length + '件)</div>';
         if (items.length === 0) {
@@ -1038,7 +1293,7 @@
               <span id="pendingImgFileName" style="font-size:0.65rem;color:#9b8b75;"></span>
             </div>`;
         }
-        itemListContainer.innerHTML = html;
+        container.innerHTML = html;
         document.querySelectorAll('.assign-btn').forEach(b => b.onclick = () => openAssignModal(b.dataset.pendid));
         document.querySelectorAll('.delete-pending').forEach(b => b.onclick = () => deletePendingItem(b.dataset.pendid));
         const addBtn = document.getElementById('addPendingItemBtn');
@@ -1050,11 +1305,12 @@
             const file = document.getElementById('newPendingImg')?.files[0];
             if (file) {
               const r = new FileReader();
-              r.onload = e => { appData.pendingItems.push({ id: generateId('pend'), name, note, img: e.target.result }); refreshAll(); };
+              r.onload = e => { appData.pendingItems.push({ id: generateId('pend'), name, note, img: e.target.result }); refreshAll(); debouncedSave(); };
               r.readAsDataURL(file);
             } else {
               appData.pendingItems.push({ id: generateId('pend'), name, note, img: '' });
               refreshAll();
+              debouncedSave();
             }
           };
         }
@@ -1065,9 +1321,10 @@
       }
 
       function renderItemPanel() {
+        const container = document.getElementById('itemListContainer');
         if (currentPanel === 'pending') { renderPendingPanel(); return; }
         if (!selectedFurnitureId) {
-          itemListContainer.innerHTML = '<div class="empty-state">🪑 点击柜子查看物品<br><br><a href="#" id="goPendingLink" style="color:#e0795c;">📥 查看待处理物品</a></div>';
+          container.innerHTML = '<div class="empty-state">🪑 点击柜子查看物品<br><br><a href="#" id="goPendingLink" style="color:#e0795c;">📥 查看待处理物品</a></div>';
           document.getElementById('goPendingLink')?.addEventListener('click', e => { e.preventDefault(); switchPanel('pending'); });
           return;
         }
@@ -1077,14 +1334,12 @@
         if (selectedLayerIndex >= layers.length) selectedLayerIndex = 0;
         const currentLayer = layers[selectedLayerIndex];
         const items = currentLayer ? (currentLayer.items || []) : [];
-        // 找到房间名
         let roomName = '';
         for (const floor of appData.floors) {
           for (const room of floor.rooms) {
             if (room.furniture.some(f => f.id === selectedFurnitureId)) { roomName = room.name; break; }
           }
         }
-
         let html = `
           <div class="drawer-title">
             <span class="drawer-color-dot" style="background:${furnRef.color}"></span>
@@ -1124,7 +1379,7 @@
             </div>
             <span id="imgFileName" style="font-size:0.65rem;color:#9b8b75;"></span>
           </div>`;
-        itemListContainer.innerHTML = html;
+        container.innerHTML = html;
 
         document.querySelectorAll('.layer-tab[data-layer-idx]').forEach(t => {
           t.addEventListener('click', () => { selectedLayerIndex = parseInt(t.dataset.layerIdx); refreshAll(); });
@@ -1135,7 +1390,7 @@
           if (!name) { alert('请输入名称'); return; }
           const note = document.getElementById('newItemNote')?.value.trim() || '';
           const file = document.getElementById('newItemImg')?.files[0];
-          const addFn = (img) => { currentLayer.items.push({ id: generateId('item'), name, note, img }); refreshAll(); };
+          const addFn = (img) => { currentLayer.items.push({ id: generateId('item'), name, note, img }); refreshAll(); debouncedSave(); };
           if (file) { const r = new FileReader(); r.onload = e => addFn(e.target.result); r.readAsDataURL(file); }
           else addFn('');
         });
@@ -1144,7 +1399,7 @@
           if (this.files[0]) document.getElementById('imgFileName').textContent = '已选: ' + this.files[0].name;
         });
         document.querySelectorAll('.delete-item').forEach(b => {
-          b.onclick = () => { if(confirm('删除？')){ currentLayer.items = currentLayer.items.filter(i=>i.id!==b.dataset.itemid); refreshAll(); } };
+          b.onclick = () => { if(confirm('删除？')){ currentLayer.items = currentLayer.items.filter(i=>i.id!==b.dataset.itemid); refreshAll(); debouncedSave(); } };
         });
         document.querySelectorAll('.edit-item').forEach(b => {
           b.onclick = () => {
@@ -1153,13 +1408,14 @@
             const nn = prompt('名称：', item.name); if(nn!==null&&nn.trim()) item.name = nn.trim();
             const nt = prompt('备注：', item.note||''); if(nt!==null) item.note = nt.trim();
             refreshAll();
+            debouncedSave();
           };
         });
       }
 
       // ============ 搜索 ============
       function searchAll() {
-        const q = searchInput.value.trim().toLowerCase();
+        const q = document.getElementById('searchInput').value.trim().toLowerCase();
         if (!q) return;
         let results = [];
         appData.floors.forEach((floor, fi) => {
@@ -1197,51 +1453,12 @@
         }
       }
 
-      // ============ 导出导入 ============
-      function exportData() {
-        const blob = new Blob([JSON.stringify(appData, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = '家人物品地图_' + new Date().toISOString().slice(0,10) + '.json';
-        document.body.appendChild(a); a.click(); document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-      }
-
-      function importData(file) {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          try {
-            const data = JSON.parse(e.target.result);
-            if (data.floors && Array.isArray(data.floors)) {
-              if (confirm('导入将覆盖当前数据，继续？')) {
-                data.floors.forEach(floor => {
-                  floor.rooms.forEach(room => {
-                    room.furniture.forEach(furn => {
-                      if (!furn.layers || !Array.isArray(furn.layers)) {
-                        furn.layers = [{ id: generateId('layer'), name: '抽屉', items: furn.items || [] }];
-                        delete furn.items;
-                      }
-                    });
-                  });
-                });
-                if (!data.pendingItems) data.pendingItems = [];
-                if (data.currentRoomIndex === undefined) data.currentRoomIndex = 0;
-                appData = data;
-                selectedFurnitureId = null; selectedLayerIndex = 0; currentPanel = 'items';
-                updatePanelTabUI();
-                refreshAll();
-                alert('导入成功！');
-              }
-            } else { alert('格式错误'); }
-          } catch (err) { alert('解析失败'); }
-        };
-        reader.readAsText(file);
-      }
-
       // ============ 刷新 ============
       function refreshAll() {
-        saveData(appData);
+        // 备份到本地
+        if (appData) {
+          localStorage.setItem('home_storage_local_backup', JSON.stringify(appData));
+        }
         renderFloorTabs();
         renderRoomTabs();
         renderCanvas();
@@ -1250,7 +1467,12 @@
         updatePanelTabUI();
       }
 
-      // 事件绑定
+      // ============ 事件绑定 ============
+      loginBtn.addEventListener('click', handleLogin);
+      passwordInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') handleLogin();
+      });
+
       document.getElementById('addFloorBtn').addEventListener('click', addFloor);
       document.getElementById('addFurnitureBtn').addEventListener('click', addFurnitureToCurrentRoom);
       document.getElementById('addPendingBtn').addEventListener('click', addPendingItem);
@@ -1274,13 +1496,10 @@
         }
       });
       document.getElementById('canvasArea').addEventListener('click', e => {
-        if (e.target === document.getElementById('canvasArea') || e.target === canvasInner) {
+        if (e.target === document.getElementById('canvasArea') || e.target === document.getElementById('canvasInner')) {
           if (selectedFurnitureId !== null) { selectedFurnitureId = null; selectedLayerIndex = 0; refreshAll(); }
         }
       });
-
-      updatePanelTabUI();
-      refreshAll();
     })();
   </script>
 </body>
