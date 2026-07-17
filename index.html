@@ -1351,6 +1351,20 @@
          layers.forEach((l, i) => {
   html += `<span class="layer-tab${i===selectedLayerIndex?' active':''}" data-layer-idx="${i}">${escapeHtml(l.name)}<span class="item-count">(${(l.items||[]).length})</span><button class="icon-btn edit-layer-name" data-layer-idx="${i}" title="改层名" style="margin-left:3px;font-size:0.65rem;">✎</button></span>`;
 });
+          // 编辑层名
+document.querySelectorAll('.edit-layer-name').forEach(btn => {
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const idx = parseInt(btn.dataset.layerIdx);
+    const layer = layers[idx];
+    const newName = prompt('修改层名：', layer.name);
+    if (newName !== null && newName.trim()) {
+      layer.name = newName.trim();
+      refreshAll();
+      debouncedSave();
+    }
+  });
+});
           html += '<span class="layer-tab" data-action="edit-layers" style="border-style:dashed;">⚙️</span></div>';
         }
         if (items.length === 0) {
